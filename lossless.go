@@ -1,3 +1,6 @@
+// Package jsonless is a Go library that populates structs from JSON and
+// allows serialization back to JSON without losing fields that are
+// not explicitly defined in the struct.
 package jsonless
 
 import (

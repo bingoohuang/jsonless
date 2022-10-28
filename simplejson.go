@@ -10,6 +10,7 @@ import (
 	"strconv"
 )
 
+// Simple is a simple JSON wrap for interface{} data.
 type Simple struct {
 	data interface{}
 }
