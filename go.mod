@@ -1,4 +1,4 @@
-module github.com/bingoohuang/lossless
+module github.com/bingoohuang/jsonless
 
 go 1.19
 

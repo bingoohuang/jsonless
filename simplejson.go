@@ -432,7 +432,7 @@ func (j *Simple) MustInt64(args ...int64) int64 {
 	return def
 }
 
-// MustUInt64 guarantees the return of an `uint64` (with optional default)
+// MustUint64 guarantees the return of an `uint64` (with optional default)
 //
 // useful when you explicitly want an `uint64` in a single value return context:
 //
