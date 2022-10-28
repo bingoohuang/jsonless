@@ -4,6 +4,8 @@ jsonless is a Go library that populates structs from JSON and
 allows serialization back to JSON without losing fields that are
 not explicitly defined in the struct.
 
+Forked from [joeshaw/json-lossless](https://github.com/joeshaw/json-lossless).
+
 ## API
 
 To get started, embed a `jsonless.JSON` inside your struct:
