@@ -6,8 +6,11 @@ package jsonless
 import (
 	"encoding/json"
 	"errors"
+	"github.com/bingoohuang/gg/pkg/ss"
 	"reflect"
 	"strings"
+
+	"github.com/bingoohuang/gg/pkg/mapstruct"
 )
 
 // The JSON type contains the state of the decoded data.  Embed this
@@ -98,7 +101,17 @@ func (js *JSON) UnmarshalJSON(dest interface{}, data []byte) error {
 	}
 
 	js.json = j
-	return syncToStruct(dest, j)
+
+	config := &mapstruct.Config{
+		WeakType: true,
+		Result:   dest,
+	}
+
+	decoder, err := mapstruct.NewDecoder(config)
+	if err != nil {
+		panic(err)
+	}
+	return decoder.Decode(j.data)
 }
 
 // MarshalJSON marshals the given source into JSON data.  Users should
@@ -111,20 +124,18 @@ func (js *JSON) UnmarshalJSON(dest interface{}, data []byte) error {
 //	}
 func (js *JSON) MarshalJSON(src interface{}) ([]byte, error) {
 	js.maybeInit()
-	err := syncFromStruct(src, js.json)
-	if err != nil {
+	if err := syncFromStruct(src, js.json); err != nil {
 		return nil, err
 	}
 
 	return json.Marshal(js.json)
 }
 
-func syncToStruct(dest interface{}, j *Simple) error {
-	dv := reflect.Indirect(reflect.ValueOf(dest))
+func syncFromStruct(src interface{}, j *Simple) error {
+	dv := reflect.Indirect(reflect.ValueOf(src))
 	dt := dv.Type()
 
-	// Probably a good candidate for future caching
-	tagmap := make(map[string]string)
+	// This skips the encoding/json "json" tag's "omitempty" value.
 	for i := 0; i < dt.NumField(); i++ {
 		sf := dt.Field(i)
 		tag := sf.Tag.Get("json")
@@ -132,77 +143,64 @@ func syncToStruct(dest interface{}, j *Simple) error {
 			continue
 		}
 
-		tagmap[sf.Name] = sf.Name
-		if tag == "" {
-			tagmap[strings.ToLower(sf.Name)] = sf.Name
-		} else {
-			tagmap[tag] = sf.Name
-		}
-	}
+		var f reflect.Value
+		var tagName string
+		var omitempty bool
 
-	m, err := j.Map()
-	if err != nil {
-		return err
-	}
-
-	for k, v := range m {
-		name, ok := tagmap[k]
-		if !ok {
-			continue
-		}
-
-		f := dv.FieldByName(name)
-		if !f.IsValid() {
-			continue
-		}
-
-		if reflect.TypeOf(v) == f.Type() {
-			f.Set(reflect.ValueOf(v))
-		} else {
-			// If the default encoding/json decoded type does
-			// not match our target type -- for instance, a
-			// time.Time that was parsed as a string but we
-			// want to store it in a time.Time field --
-			// re-marshal and unmarshal it into the target
-			// type.  Gross, yes.
-			marsh, err := json.Marshal(v)
-			if err != nil {
-				return err
+		if j := strings.Index(tag, ","); j != -1 {
+			tagName = tag[:j]
+			if tagName == "-" {
+				continue
 			}
-			fv := f.Addr().Interface()
-			err = json.Unmarshal(marsh, fv)
-			if err != nil {
-				return err
-			}
+
+			f = dv.Field(i)
+			// If "omitempty" is specified in the tag, it ignores empty values.
+			omitempty = strings.Contains(tag[j+1:], "omitempty") && isEmptyValue(f)
+		} else {
+			tagName = tag
+			f = dv.Field(i)
+		}
+
+		name := ss.If(tagName == "", sf.Name, tagName)
+		if omitempty {
+			j.Del(name)
+		} else {
+			j.Set(name, f.Interface())
 		}
 	}
 
 	return nil
 }
 
-func syncFromStruct(src interface{}, j *Simple) error {
-	dv := reflect.Indirect(reflect.ValueOf(src))
-	dt := dv.Type()
-
-	// This skips the encoding/json "json" tag's "omitempty"
-	// value.
-	for i := 0; i < dt.NumField(); i++ {
-		sf := dt.Field(i)
-		tag := sf.Tag.Get("json")
-		if tag == "-" {
-			continue
-		}
-
-		var name string
-		if tag == "" {
-			name = sf.Name
-		} else {
-			name = tag
-		}
-
-		f := dv.Field(i)
-		j.Set(name, f.Interface())
+func isEmptyValue(v reflect.Value) bool {
+	switch getKind(v) {
+	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
+		return v.Len() == 0
+	case reflect.Bool:
+		return !v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.Interface, reflect.Ptr:
+		return v.IsNil()
 	}
+	return false
+}
 
-	return nil
+func getKind(val reflect.Value) reflect.Kind {
+	kind := val.Kind()
+
+	switch {
+	case kind >= reflect.Int && kind <= reflect.Int64:
+		return reflect.Int
+	case kind >= reflect.Uint && kind <= reflect.Uint64:
+		return reflect.Uint
+	case kind >= reflect.Float32 && kind <= reflect.Float64:
+		return reflect.Float32
+	default:
+		return kind
+	}
 }

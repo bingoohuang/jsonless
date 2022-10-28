@@ -89,14 +89,3 @@ When serialized, `Extra` will look like this:
   }
 }
 ```
-
-## Known issues
-
-jsonless doesn't attempt to decode arrays or simple values.
-For those, just use `json/encoding` directly.
-
-The `omitempty` setting on `json` tag is not handled. In fact, no
-parsing of the tags are done at all.
-
-The `jsonless.JSON` value needs to be tagged with `json:"-"` or
-it will be marshaled to JSON.
